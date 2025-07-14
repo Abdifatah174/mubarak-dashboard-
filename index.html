@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mubarak Food & Grocery | Loan Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f9f9f9;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background-color: #006a4e;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 1rem;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .form-group, .search-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .form-group input, .search-group input, .search-group select {
+      flex: 1;
+      padding: 0.5rem;
+      font-size: 1rem;
+    }
+    .form-group button {
+      padding: 0.5rem 1rem;
+      background-color: #006a4e;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    table, th, td {
+      border: 1px solid #ddd;
+    }
+    th, td {
+      padding: 0.75rem;
+      text-align: left;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    .edit-btn {
+      background-color: #ffa500;
+      color: white;
+      padding: 0.3rem 0.6rem;
+      border: none;
+      cursor: pointer;
+      margin-right: 4px;
+    }
+    .paid-btn {
+      background-color: #28a745;
+      color: white;
+      padding: 0.3rem 0.6rem;
+      border: none;
+      cursor: pointer;
+    }
+    .delete-btn {
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      padding: 0.3rem 0.6rem;
+      cursor: pointer;
+      margin-left: 5px;
+    }
+    .total-section {
+      text-align: right;
+      font-weight: bold;
+      margin-top: 1rem;
+    }
+    #modalConfirm, #modalEdit {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.5);
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background: white;
+      padding: 1rem 2rem;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .modal-buttons {
+      margin-top: 1rem;
+    }
+    .modal-buttons button {
+      margin: 0 0.5rem;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mubarak Food & Grocery Loan Dashboard</h1>
+    <p>Monitor and manage community support loans effectively</p>
+  </header>
+
+  <div class="container">
+    <div class="form-group">
+      <input type="text" id="phoneInput" placeholder="Phone Number" />
+      <input type="text" id="nameInput" placeholder="Full Name" />
+      <input type="date" id="dateInput" />
+      <input type="number" id="amountInput" placeholder="Loan Amount" />
+      <input type="text" id="commentInput" placeholder="Comment (optional)" />
+      <button onclick="addLoan()">Add Loan</button>
+    </div>
+
+    <div class="search-group">
+      <input type="text" id="search" placeholder="Search by phone or name..." oninput="renderLoans()" />
+      <select id="statusFilter" onchange="renderLoans()">
+        <option value="all">All</option>
+        <option value="Paid">Paid</option>
+        <option value="Unpaid">Unpaid</option>
+      </select>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Phone</th>
+          <th>Name</th>
+          <th>Date</th>
+          <th>Amount</th>
+          <th>Comment</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="loanTable"></tbody>
+    </table>
+
+    <div class="total-section">
+      Total Outstanding: $<span id="totalAmount">0.00</span>
+    </div>
+  </div>
+
+  <div id="modalConfirm">
+    <div class="modal-content">
+      <p>Are you sure you want to mark this loan as paid?</p>
+      <div class="modal-buttons">
+        <button onclick="confirmPaid()">Yes</button>
+        <button onclick="cancelPaid()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalEdit">
+    <div class="modal-content">
+      <p>Edit Loan Amount</p>
+      <input type="number" id="editAmount" />
+      <div class="modal-buttons">
+        <button onclick="confirmEdit()">Save</button>
+        <button onclick="cancelEdit()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let loans = JSON.parse(localStorage.getItem('loans')) || [];
+  let paidIndex = null;
+  let editIndex = null;
+
+  function addLoan() {
+    const phone = document.getElementById('phoneInput').value.trim();
+    const name = document.getElementById('nameInput').value.trim();
+    const date = document.getElementById('dateInput').value;
+    const amountInput = document.getElementById('amountInput').value.trim();
+    const comment = document.getElementById('commentInput').value.trim();
+    const amount = parseFloat(amountInput);
+
+    if (!phone || !name || !date || amountInput === '' || isNaN(amount)) {
+      alert('All fields are required and amount must be a valid number.');
+      return;
+    }
+
+    const existingIndex = loans.findIndex(l => l.phone === phone);
+    if (existingIndex !== -1) {
+      loans[existingIndex].amount += amount;
+      loans[existingIndex].date = date;
+      loans[existingIndex].comment = comment;
+      if (loans[existingIndex].status === 'Paid') loans[existingIndex].status = 'Unpaid';
+    } else {
+      loans.push({ phone: phone.toString(), name, date, amount, comment, status: 'Unpaid' });
+    }
+
+    localStorage.setItem('loans', JSON.stringify(loans));
+    renderLoans();
+    clearForm();
+  }
+
+  function renderLoans() {
+    const statusFilter = document.getElementById('statusFilter').value;
+    const searchQuery = document.getElementById('search').value.toLowerCase();
+    const tbody = document.getElementById('loanTable');
+    tbody.innerHTML = '';
+    let total = 0;
+
+    loans.forEach((loan, index) => {
+      const matchesSearch = loan.phone.toLowerCase().includes(searchQuery) || loan.name.toLowerCase().includes(searchQuery);
+      const matchesStatus = statusFilter === 'all' || loan.status === statusFilter;
+
+      if (matchesSearch && matchesStatus) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${loan.phone}</td>
+          <td>${loan.name}</td>
+          <td>${loan.date}</td>
+          <td>$${loan.amount.toFixed(2)}</td>
+          <td>${loan.comment || ''}</td>
+          <td>${loan.status}</td>
+          <td>
+            <button class="edit-btn" onclick="editLoan(${index})">Edit</button>
+            <button class="delete-btn" onclick="deleteLoan(${index})">Delete</button>
+            ${loan.status !== 'Paid' ? `<button class="paid-btn" onclick="showConfirm(${index})">Mark Paid</button>` : ''}
+          </td>
+        `;
+        tbody.appendChild(row);
+
+        if (loan.status !== 'Paid') {
+          total += loan.amount;
+        }
+      }
+    });
+
+    document.getElementById('totalAmount').innerText = total.toFixed(2);
+  }
+
+  function editLoan(index) {
+    editIndex = index;
+    document.getElementById('editAmount').value = loans[index].amount;
+    document.getElementById('modalEdit').style.display = 'flex';
+  }
+
+  function confirmEdit() {
+    const newVal = parseFloat(document.getElementById('editAmount').value);
+    if (!isNaN(newVal)) {
+      loans[editIndex].amount = newVal;
+      loans[editIndex].status = 'Unpaid';
+      localStorage.setItem('loans', JSON.stringify(loans));
+      renderLoans();
+    }
+    document.getElementById('modalEdit').style.display = 'none';
+    editIndex = null;
+  }
+
+  function cancelEdit() {
+    document.getElementById('modalEdit').style.display = 'none';
+    editIndex = null;
+  }
+
+  function deleteLoan(index) {
+    loans.splice(index, 1);
+    localStorage.setItem('loans', JSON.stringify(loans));
+    renderLoans();
+  }
+
+  function showConfirm(index) {
+    paidIndex = index;
+    document.getElementById('modalConfirm').style.display = 'flex';
+  }
+
+  function confirmPaid() {
+    if (paidIndex !== null) {
+      loans[paidIndex].status = 'Paid';
+      localStorage.setItem('loans', JSON.stringify(loans));
+      renderLoans();
+      paidIndex = null;
+    }
+    document.getElementById('modalConfirm').style.display = 'none';
+  }
+
+  function cancelPaid() {
+    paidIndex = null;
+    document.getElementById('modalConfirm').style.display = 'none';
+  }
+
+  function clearForm() {
+    document.getElementById('phoneInput').value = '';
+    document.getElementById('nameInput').value = '';
+    document.getElementById('dateInput').value = '';
+    document.getElementById('amountInput').value = '';
+    document.getElementById('commentInput').value = '';
+  }
+
+  window.onload = renderLoans;
+</script>
+</body>
+</html>
